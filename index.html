@@ -1,0 +1,298 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080d18">
+<title>BANCA PRO</title>
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;background:#080d18;color:white;
+ font-family:Arial,sans-serif;padding:20px;
+}
+header{text-align:center;padding:15px}
+h1{color:#20d68a;font-size:30px;margin:5px}
+.sub{color:#9ba9bd;font-size:12px}
+.card{
+ background:#121d30;border:1px solid #26364e;
+ border-radius:15px;padding:18px;margin:15px 0;
+}
+.label{color:#9ba9bd;font-size:13px}
+.saldo{font-size:34px;font-weight:bold;color:#20d68a;margin-top:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.valor{font-size:21px;font-weight:bold;margin-top:8px}
+button{
+ border:0;border-radius:10px;padding:14px;
+ background:#20d68a;color:#06140e;font-weight:bold;
+ font-size:15px;width:100%;margin-top:10px;
+}
+input,select{
+ width:100%;padding:13px;margin-top:8px;
+ border-radius:9px;border:1px solid #34445c;
+ background:#080f1c;color:white;font-size:16px;
+}
+h3{margin-top:0;color:#20d68a}
+</style>
+</head>
+<body>
+<header>
+<h1>BANCA PRO</h1>
+<div class="sub">CONTROLE INTELIGENTE DE OPERAÇÕES</div>
+</header>
+
+<div class="card">
+<div class="label">SALDO ATUAL DA BANCA</div>
+<div class="saldo" id="saldo">R$ 0,00</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<div class="label">LUCRO TOTAL</div>
+<div class="valor" id="lucro">R$ 0,00</div>
+</div>
+
+<div class="card">
+<div class="label">OPERAÇÕES</div>
+<div class="valor" id="total">0</div>
+</div>
+
+<div class="card">
+<div class="label">TOTAL WIN</div>
+<div class="valor" id="wins" style="color:#20d68a">0</div>
+</div>
+
+<div class="card">
+<div class="label">TOTAL LOSS</div>
+<div class="valor" id="losses" style="color:#ff5555">0</div>
+</div>
+
+<div class="card">
+<div class="label">TAXA DE ACERTO</div>
+<div class="valor" id="acerto">0%</div>
+</div>
+
+<div class="card">
+<div class="label">LUCRO DO DIA</div>
+<div class="valor" id="lucroDia">R$ 0,00</div>
+</div>
+</div>
+
+<div class="card">
+<h3>Configurar banca</h3>
+<label class="label">Banca inicial (R$)</label>
+<input id="inicial" type="number" min="0.01" step="0.01" placeholder="Ex: 100">
+<button onclick="configurar()">SALVAR BANCA</button>
+</div>
+
+<div class="card">
+<h3>Nova operação</h3>
+<label class="label">Valor investido (R$)</label>
+<input id="valor" type="number" min="0.01" step="0.01" placeholder="Ex: 10" oninput="this.dataset.editado='sim'">
+<div class="label">Sugestão automática: 5% da banca. Você pode alterar o valor.</div>
+
+<label class="label">Resultado</label>
+<select id="resultado">
+<option value="win">WIN - Vitória</option>
+<option value="loss">LOSS - Derrota</option>
+</select>
+
+<label class="label">Lucro percentual sobre o investimento (%)</label>
+<input id="taxa" type="number" min="0" step="0.01" placeholder="Ex: 85">
+
+<div id="avisoLimite" class="label" style="margin-top:10px;color:#9ba9bd">
+Limite diário: bloqueio após 3 LOSS.
+</div>
+<button id="botaoRegistrar" onclick="registrar()">REGISTRAR OPERAÇÃO</button>
+</div>
+
+<div class="card">
+<h3>Relatório diário</h3>
+<div id="relatorioDia" class="label">Carregando relatório...</div>
+</div>
+
+<div class="card">
+<h3>Relatório semanal</h3>
+<div id="relatorioSemana" class="label">Carregando relatório...</div>
+</div>
+
+<div class="card">
+<h3>Histórico</h3>
+<div id="historico" class="label">Nenhuma operação registrada.</div>
+</div>
+
+<script>
+let banca=Number(localStorage.getItem("banca")||0);
+let lucro=Number(localStorage.getItem("lucro")||0);
+let operacoes=JSON.parse(localStorage.getItem("operacoes")||"[]");
+
+function dinheiro(v){
+ return v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+}
+
+function salvar(){
+ localStorage.setItem("banca",banca);
+ localStorage.setItem("lucro",lucro);
+ localStorage.setItem("operacoes",JSON.stringify(operacoes));
+ atualizar();
+}
+
+function configurar(){
+ let v=Number(document.getElementById("inicial").value);
+ if(v<=0){alert("Digite uma banca válida.");return;}
+ if(!confirm("Configurar a banca inicial? Isso reinicia os resultados e o histórico."))return;
+ banca=v;lucro=0;operacoes=[];
+ salvar();
+ alert("Banca configurada!");
+}
+
+function contarLossHoje(){
+  let hoje=new Date().toLocaleDateString("pt-BR");
+  return operacoes.filter(op=>
+    op.resultado==="loss" && op.data.split(",")[0]===hoje
+  ).length;
+}
+
+function registrar(){
+  if(contarLossHoje()>=3){
+    alert("Limite diário atingido: você já teve 3 LOSS hoje. Novas operações estão bloqueadas até amanhã.");
+    atualizar();
+    return;
+  }
+
+ let valor=Number(document.getElementById("valor").value);
+ let resultado=document.getElementById("resultado").value;
+ let taxa=Number(document.getElementById("taxa").value);
+
+ if(valor<=0){alert("Informe um investimento válido.");return;}
+ if(valor>banca){alert("Investimento maior que a banca disponível.");return;}
+ if(taxa<0 || taxa>1000){alert("Confira o percentual informado.");return;}
+
+ let ganho=resultado==="win"?valor*taxa/100:-valor;
+ banca+=ganho;lucro+=ganho;
+
+ operacoes.unshift({
+ data:new Date().toLocaleString("pt-BR"),
+ valor,resultado,ganho
+ });
+ salvar();
+let campoValor=document.getElementById("valor");
+campoValor.value=(banca*0.05).toFixed(2);
+campoValor.dataset.editado="";
+ alert("Operação registrada!");
+}
+
+
+function dataOperacao(op){
+ let parte=op.data.split(",")[0].trim();
+ let pedacos=parte.split("/");
+ if(pedacos.length!==3)return null;
+ let dia=Number(pedacos[0]), mes=Number(pedacos[1])-1, ano=Number(pedacos[2]);
+ let data=new Date(ano,mes,dia);
+ if(isNaN(data.getTime()))return null;
+ data.setHours(0,0,0,0);
+ return data;
+}
+
+function resumoOperacoes(lista){
+ let wins=lista.filter(op=>op.resultado==="win").length;
+ let losses=lista.filter(op=>op.resultado==="loss").length;
+ let resultado=lista.reduce((soma,op)=>soma+Number(op.ganho||0),0);
+ let investido=lista.reduce((soma,op)=>soma+Number(op.valor||0),0);
+ return {total:lista.length,wins,losses,resultado,investido};
+}
+
+function montarRelatorio(resumo){
+ let cor=resumo.resultado>=0?"#20d68a":"#ff5555";
+ return '<div style="line-height:1.9">' +
+  'Operações: <strong>'+resumo.total+'</strong><br>' +
+  'WIN: <strong style="color:#20d68a">'+resumo.wins+'</strong><br>' +
+  'LOSS: <strong style="color:#ff5555">'+resumo.losses+'</strong><br>' +
+  'Total investido: <strong>'+dinheiro(resumo.investido)+'</strong><br>' +
+  'Resultado líquido: <strong style="color:'+cor+'">'+dinheiro(resumo.resultado)+'</strong>' +
+  '</div>';
+}
+
+function atualizar(){
+ document.getElementById("saldo").textContent=dinheiro(banca);
+ document.getElementById("lucro").textContent=dinheiro(lucro);
+ document.getElementById("total").textContent=operacoes.length;
+
+ let wins=operacoes.filter(op=>op.resultado==="win").length;
+ let losses=operacoes.filter(op=>op.resultado==="loss").length;
+ let acerto=operacoes.length?(wins/operacoes.length)*100:0;
+
+ let hoje=new Date().toLocaleDateString("pt-BR");
+ let lucroDia=operacoes
+ .filter(op=>op.data.split(",")[0]===hoje)
+ .reduce((soma,op)=>soma+op.ganho,0);
+
+ let operacoesHoje=operacoes.filter(op=>op.data.split(",")[0]===hoje);
+ document.getElementById("relatorioDia").innerHTML=montarRelatorio(resumoOperacoes(operacoesHoje));
+
+ let inicioSemana=new Date();
+ inicioSemana.setHours(0,0,0,0);
+ let diaSemana=inicioSemana.getDay();
+ inicioSemana.setDate(inicioSemana.getDate()-(diaSemana===0?6:diaSemana-1));
+ let fimSemana=new Date(inicioSemana);
+ fimSemana.setDate(inicioSemana.getDate()+6);
+ let operacoesSemana=operacoes.filter(op=>{
+  let data=dataOperacao(op);
+  return data && data>=inicioSemana && data<=fimSemana;
+ });
+ let periodo=inicioSemana.toLocaleDateString("pt-BR")+" a "+fimSemana.toLocaleDateString("pt-BR");
+ document.getElementById("relatorioSemana").innerHTML=
+  '<div style="margin-bottom:8px;color:#9ba9bd">Semana: '+periodo+'</div>'+
+  montarRelatorio(resumoOperacoes(operacoesSemana));
+
+ document.getElementById("wins").textContent=wins;
+ document.getElementById("losses").textContent=losses;
+ document.getElementById("acerto").textContent=acerto.toFixed(1)+"%";
+ document.getElementById("lucroDia").textContent=dinheiro(lucroDia);
+
+  let lossesHoje=contarLossHoje();
+  let aviso=document.getElementById("avisoLimite");
+  let botao=document.getElementById("botaoRegistrar");
+  if(lossesHoje>=3){
+    aviso.textContent="LIMITE ATINGIDO: 3 LOSS hoje. Operações bloqueadas até amanhã.";
+    aviso.style.color="#ff5555";
+    botao.disabled=true;
+    botao.textContent="OPERAÇÕES BLOQUEADAS HOJE";
+    botao.style.background="#6b2630";
+    botao.style.color="#ffffff";
+  }else{
+    aviso.textContent="LOSS hoje: "+lossesHoje+"/3. Restam "+(3-lossesHoje)+" antes do bloqueio.";
+    aviso.style.color="#9ba9bd";
+    botao.disabled=false;
+    botao.textContent="REGISTRAR OPERAÇÃO";
+    botao.style.background="#20d68a";
+    botao.style.color="#06140e";
+  }
+
+let campoValor=document.getElementById("valor");
+if(campoValor && (campoValor.dataset.editado!=="sim" || !campoValor.value)){
+ campoValor.value=(banca*0.05).toFixed(2);
+}
+ let h=document.getElementById("historico");
+ h.innerHTML="";
+
+ if(!operacoes.length){
+  h.textContent="Nenhuma operação registrada.";
+  return;
+ }
+
+ operacoes.forEach(op=>{
+  let d=document.createElement("div");
+  d.style.padding="12px 0";
+  d.style.borderBottom="1px solid #26364e";
+  d.textContent=op.data+" | "+op.resultado.toUpperCase()+
+  " | "+dinheiro(op.valor)+" | "+dinheiro(op.ganho);
+  h.appendChild(d);
+ });
+}
+
+atualizar();
+</script>
+</body>
+</html>
